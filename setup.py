@@ -5,9 +5,9 @@ except ImportError:
     from distutils.core import setup
 
 setup(
-    name = 'rplidar',
-    py_modules = ['rplidar'],
-    version = '0.9.2',
+    name = 'rplidar-roboticia',
+    py_modules = ['rplidar-roboticia'],
+    version = '0.9.3',
     description = 'Simple and lightweight module for working with RPLidar laser scanners',
     author='Artyom Pavlov, Julien Jehl',
     author_email='julien.@roboticia.com',
