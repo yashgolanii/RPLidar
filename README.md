@@ -13,12 +13,12 @@ For protocol specifications please refer to the slamtec
 You can install rplidar using `pip`:
 
 ```sh
-$ pip install rplidar
+$ pip install rplidar-roboticia
 ```
 
 Or for Python 3:
 ```sh
-$ sudo pip3 install rplidar
+$ sudo pip3 install rplidar-roboticia
 ```
 
 ## Documentation

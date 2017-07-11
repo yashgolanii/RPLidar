@@ -95,17 +95,12 @@ def _process_scan(raw):
 
 
 def _process_express_scan(data, new_angle, trame):
-    if trame == 1:
-        new = True
-    else:
-        new = False
-    new_scan = (new_angle < data.start_angle) & new
-    quality = None
+    new_scan = (new_angle < data.start_angle) & (trame == 1)
     angle = (data.start_angle + (
             (new_angle - data.start_angle) % 360
             )/32*trame - data.angle[trame-1]) % 360
     distance = data.distance[trame-1]
-    return new_scan, quality, angle, distance
+    return new_scan, None, angle, distance
 
 
 class RPLidar(object):
@@ -481,7 +476,7 @@ class ExpressPacket(namedtuple('express_packet',
         start_angle = (packet[2] + ((packet[3] & 0b01111111) << 8)) / 64
 
         d = a = ()
-        for i in range(16):
+        for i in range(0,80,5):
             d += ((packet[i+4] >> 2) + (packet[i+5] << 6),)
             a += (((packet[i+8] & 0b00001111) + ((
                     packet[i+4] & 0b00000001) << 4))/8*cls.sign[(
