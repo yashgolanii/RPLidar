@@ -1,19 +1,26 @@
 import math
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 from rplidar import RPLidar
+import serial
+import time
+import rplidar
+import threading
 
-# LIDAR setup
-PORT_NAME = '/dev/ttyUSB0'
-lidar = RPLidar(PORT_NAME)
+# LIDAR and IMU setup
+LIDAR_PORT = '/dev/ttyUSB0'
+IMU_PORT = '/dev/ttyACM0'
+IMU_BAUDRATE = 9600
+
+lidar = RPLidar(LIDAR_PORT)
+imu_serial = serial.Serial(IMU_PORT, IMU_BAUDRATE, timeout=1)
 
 # Parameters
 DMAX = 4000  # Maximum distance in mm to include points
 POINT_SIZE = 1  # Size of points in the plot
-TRANS_STEP = 50  # Translational step in mm per frame
 
-# Global map and position
-global_map = []  # List to store all points in the global frame
-current_position = [0, 0]  # LIDAR's position in the global frame (x, y)
+# Global map for 3D points
+global_map = []
 
 # Functions
 def polar_to_cartesian(angle_deg, distance_mm):
@@ -23,67 +30,115 @@ def polar_to_cartesian(angle_deg, distance_mm):
     y = distance_mm * math.sin(angle_rad)
     return x, y
 
-def transform_to_global(local_points, lidar_position):
-    """Transform points from the LIDAR's local frame to the global frame."""
+def get_tilt_angle():
+    """Fetch tilt angle (pitch) from IMU."""
+    try:
+        line = imu_serial.readline().decode('utf-8').strip()
+        if line.startswith("Accel:"):  # Clean up prefix if present
+            line = line.replace("Accel: ", "").strip()
+        if line.count(",") == 2:  # Ensure correct format
+            ax, ay, gz = map(float, line.split(","))
+        else:
+            return 0.0  # Default to no tilt on malformed data
+        # Use gyroscope Z-axis (gz) for tilt angle (pitch)
+        time.sleep(0.05)  # Adjust delay as needed
+        return gz  # In degrees or radians as needed
+    except Exception as e:
+        print(f"Error reading IMU data: {e}")
+        return 0.0
+
+def transform_to_3d(local_points, tilt_angle):
+    """Transform 2D LIDAR points to 3D based on tilt angle."""
     global_points = []
+    tilt_rad = math.radians(tilt_angle)
     for x, y in local_points:
-        global_x = x + lidar_position[0]
-        global_y = y + lidar_position[1]
-        global_points.append((global_x, global_y))
+        z = y * math.sin(tilt_rad)  # Project y-axis distance to z-axis
+        y_proj = y * math.cos(tilt_rad)  # Adjust y-axis for tilt
+        global_points.append((x, y_proj, z))
     return global_points
 
 def update_map(lidar, ax, scatter):
-    """Fetch data from LIDAR, transform, and update the map."""
-    global current_position, global_map
+    global global_map
     for scan in lidar.iter_scans():
-        # Collect points in the local frame
+        start_time = time.time()
+
+        # LIDAR data collection
         local_points = []
         for _, angle, distance in scan:
             if distance > 0 and distance <= DMAX:  # Filter out invalid or out-of-range points
                 x, y = polar_to_cartesian(angle, distance)
                 local_points.append((x, y))
-        
-        # Transform to global frame
-        global_points = transform_to_global(local_points, current_position)
-        global_map.extend(global_points)
 
-        # Simulate translational motion
-        current_position[0] += TRANS_STEP  # Move LIDAR along x-axis for simplicity
+        # IMU data collection
+        tilt_angle = get_tilt_angle()
+
+        # Transform to 3D points
+        global_points = transform_to_3d(local_points, tilt_angle)
+        global_map.extend(global_points)
 
         # Update scatter plot
         if global_map:
             x_coords = [p[0] for p in global_map]
             y_coords = [p[1] for p in global_map]
-            scatter.set_offsets(list(zip(x_coords, y_coords)))
-            plt.pause(0.01)  # Adjust for smoother animation
+            z_coords = [p[2] for p in global_map]
+            scatter._offsets3d = (x_coords, y_coords, z_coords)
+
+        # Maintain consistent timing
+        elapsed = time.time() - start_time
+        time.sleep(max(0, 0.1 - elapsed))  # Adjust interval as needed
+        plt.pause(0.01)  # Adjust for smoother animation
 
 # Main execution
 def main():
     try:
-        print("Starting LIDAR...")
-        lidar.connect()
+        print("Starting LIDAR and IMU...")
         
+        # Clear LIDAR buffer
+        lidar.stop()
+        lidar.disconnect()
+        lidar.connect()
+        lidar.clean_input()
+
+        lidar._serial.reset_input_buffer()  # Clear any old data
+        imu_serial.reset_input_buffer()
+
+
+        # Clear IMU buffer
+        imu_serial.reset_input_buffer()  # Clear IMU input buffer
+        imu_serial.reset_output_buffer()  # Clear IMU output buffer
+
+        # Start LIDAR motor
+        lidar.start_motor()
+        lidar._set_pwm(60)
+        lidar.clean_input
+        print(lidar.motor_speed)# Ensure the motor is running
+  # Reduce from default 660 RPM to 200 RPM
+
         # Set up the plot
         plt.ion()
-        fig, ax = plt.subplots(figsize=(10, 10))
-        ax.set_title("Dynamic Mapping with Translational Motion")
-        ax.set_xlim(-DMAX * 2, DMAX * 2)
-        ax.set_ylim(-DMAX * 2, DMAX * 2)
+        fig = plt.figure(figsize=(10, 10))
+        ax = fig.add_subplot(111, projection='3d')
+        ax.set_title("3D Mapping with Tilted LIDAR")
+        ax.set_xlim(-DMAX, DMAX)
+        ax.set_ylim(-DMAX, DMAX)
+        ax.set_zlim(-DMAX, DMAX)
         ax.set_xlabel("X (mm)")
         ax.set_ylabel("Y (mm)")
-        ax.grid(True)
-        scatter = ax.scatter([], [], s=POINT_SIZE)
+        ax.set_zlabel("Z (mm)")
+        scatter = ax.scatter([], [], [], s=POINT_SIZE)
 
-        # Dynamic mapping
+        # Begin dynamic mapping
         update_map(lidar, ax, scatter)
 
     except KeyboardInterrupt:
-        print("Stopping LIDAR...")
+        print("Stopping LIDAR and IMU...")
 
     finally:
         lidar.stop()
         lidar.disconnect()
-        print("LIDAR stopped.")
+        imu_serial.close()
+        print("LIDAR and IMU stopped.")
+
 
 if __name__ == "__main__":
     main()
