@@ -137,7 +137,7 @@ def main():
         lidar.stop()
         lidar.disconnect()
         imu_serial.close()
-        print("LIDAR and IMU stopped.")
+        print("LIDAR and IMU stopped")
 
 
 if __name__ == "__main__":
