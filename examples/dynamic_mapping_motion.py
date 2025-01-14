@@ -74,6 +74,7 @@ def update_map(lidar, ax, scatter):
     for scan in lidar.iter_scans():
         local_points = []
         for _, angle, distance in scan:
+            lidar.clean_input()
             if distance > 0 and distance <= DMAX:
                 x, y = polar_to_cartesian(angle, distance)
                 local_points.append((x, y))
@@ -95,6 +96,9 @@ def main():
     try:
         print("Starting LIDAR and IMU...")
         print(lidar.get_info)
+        status, error_code = lidar.get_health()
+        print(f"LIDAR health status: {status}, Error code: {error_code}")
+        
         print(lidar.express_data)
         print(lidar.motor_running)
         print(lidar.motor_speed)
