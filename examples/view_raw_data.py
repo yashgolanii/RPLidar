@@ -12,7 +12,7 @@ def view_raw_data():
             # Print each raw packet's details
             print(f"New Scan: {new_scan}, Quality: {quality}, Angle: {angle}, Distance: {distance}")
     except KeyboardInterrupt:
-        print("Stopping LiDAR...")
+        print("Stopping LiDAR.....")
     finally:
         lidar.stop()
         lidar.disconnect()
