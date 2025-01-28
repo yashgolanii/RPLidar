@@ -14,7 +14,7 @@ POINT_SIZE = 1
 
 # Initialize LIDAR and IMU
 lidar = RPLidar(LIDAR_PORT)
-imu_serial = serial.Serial(IMU_PORT, IMU_BAUDRATE, timeout=1)
+imu_serial = serial.Serial(IMU_PORT, IMU_BAUDRATE, timeout=2)
 global_map = []
 
 
@@ -72,6 +72,7 @@ def transform_to_3d(local_points, tilt_angle):
 def update_map(lidar, ax, scatter):
     global global_map
     for scan in lidar.iter_scans():
+        lidar.clean_input()
         local_points = []
         for _, angle, distance in scan:
             lidar.clean_input()
