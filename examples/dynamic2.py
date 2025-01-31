@@ -19,7 +19,8 @@ imu_serial = serial.Serial(IMU_PORT, IMU_BAUDRATE, timeout=1)
 global_map = []
 
 # Shared variables for IMU data
-tilt_angle = 0.0
+tilt_angle = 0.0  # Pitch (X-axis)
+yaw_angle = 0.0   # Yaw (Z-axis)
 tilt_lock = threading.Lock()
 
 def polar_to_cartesian(angle_deg, distance_mm):
@@ -31,27 +32,39 @@ def polar_to_cartesian(angle_deg, distance_mm):
 
 def read_imu_data():
     """Read IMU data in a separate thread."""
-    global tilt_angle
+    global tilt_angle, yaw_angle
     while True:
         try:
             line = imu_serial.readline().decode('utf-8').strip()
             if line.startswith("GY:"):
                 gy_raw = float(line.replace("GY:", "").strip())
                 with tilt_lock:  # Safely update shared variable
-                    tilt_angle += gy_raw * 0.01  # Example integration
+                    tilt_angle += gy_raw * 0.01  # Example integration for pitch
+            if line.startswith("AZ:"):  # Assuming yaw is in a different line (AZ is just an example)
+                az_raw = float(line.replace("AZ:", "").strip())
+                with tilt_lock:  # Safely update shared variable
+                    yaw_angle += az_raw * 0.01  # Example integration for yaw
         except Exception as e:
             print(f"IMU read error: {e}")
 
 def transform_to_3d(local_points):
-    """Transform 2D LiDAR points to 3D using the latest tilt angle."""
-    global tilt_angle
+    """Transform 2D LiDAR points to 3D using the latest tilt and yaw angles."""
+    global tilt_angle, yaw_angle
     global_points = []
     with tilt_lock:  # Safely read shared variable
         tilt_rad = math.radians(tilt_angle)
+        yaw_rad = math.radians(yaw_angle)
+    
     for x, y in local_points:
+        # Apply pitch (tilt) first
         z = y * math.sin(tilt_rad)
         y_proj = y * math.cos(tilt_rad)
-        global_points.append((x, y_proj, z))
+        
+        # Apply yaw (rotation around Z-axis)
+        x_rot = x * math.cos(yaw_rad) - y_proj * math.sin(yaw_rad)
+        y_rot = x * math.sin(yaw_rad) + y_proj * math.cos(yaw_rad)
+        
+        global_points.append((x_rot, y_rot, z))
     return global_points
 
 def update_map(lidar, ax, scatter):
@@ -78,10 +91,9 @@ def update_map(lidar, ax, scatter):
             scatter._offsets3d = (x_coords, y_coords, z_coords)
             plt.pause(0.01)
 
-
 def main():
     try:
-        print("Starting LIDAR and IMU..")
+        print("Starting LIDAR and IMU...")
         status, error_code = lidar.get_health()
         print(f"LIDAR health status: {status}, Error code: {error_code}")
 
@@ -93,7 +105,7 @@ def main():
         plt.ion()
         fig = plt.figure(figsize=(10, 10))
         ax = fig.add_subplot(111, projection='3d')
-        ax.set_title("3D Mapping with Tilted LIDAR")
+        ax.set_title("3D Mapping with Tilted LIDAR (Pitch + Yaw)")
         ax.set_xlim(-DMAX, DMAX)
         ax.set_ylim(-DMAX, DMAX)
         ax.set_zlim(-DMAX, DMAX)
