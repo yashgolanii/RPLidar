@@ -81,7 +81,7 @@ def update_map(lidar, ax, scatter):
 
 def main():
     try:
-        print("Starting LIDAR and IMU...")
+        print("Starting LIDAR and IMU..")
         status, error_code = lidar.get_health()
         print(f"LIDAR health status: {status}, Error code: {error_code}")
 
